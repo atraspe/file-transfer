@@ -16,19 +16,30 @@ parser.add_argument('-v', '--verbose', help='explain what is being done', action
 
 args = parser.parse_args()
 
-gateways = {1 : 'gate-sn.ohctr.gxs.com', 2 : 'gate-sn.avctr.gxs.com'}
-servers = {1 : 'server1', 2 : 'server2'}
-choice = lambda question : int(input(question))
+gateway = {1 : 'gate-sn.ohctr.gxs.com', 2 : 'gate-sn.avctr.gxs.com'}
+server = {1 : 'server1', 2 : 'server2'}
+
+def ask(question):
+    while True:
+        try:
+            choice = int(input(question))
+        except:
+            print('!!! Invalid selection...\n')
+        else:
+            return choice
 
 print(line)
+
 if args.verbose:
     print(f'Executing {__file__}...\n')
     print('Gathering missing information...\n')
-    print('Gateway\n-------')
-    if not args.gateway:
-        args.gateway = gateways[choice('Gateway to use: ')]
-    if not args.server:
-        args.server = servers[choice('Server to connect to: ')]
 
-print(args.gateway)
-print(args.server)
+if not args.gateway:
+    print('\nGateway\n-------')
+    args.gateway = gateway[ask('1) gate-sn.ohctr.gxs.com\n2) gate-sn.avctr.gxs.com\nGateway to use: ')]
+if not args.server:
+    print('\nServer\n------')
+    args.server = server[ask('1) server1\n2) server2\nServer to connect to: ')]
+
+print(f'Gateway: {args.gateway}')
+print(f'Server: {args.server}')
