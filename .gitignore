@@ -105,3 +105,8 @@ venv.bak/
 
 # vscode
 .vscode/
+
+# my notes and sample files
+file-transfer_notes.txt
+file
+test.txt
