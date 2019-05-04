@@ -3,6 +3,7 @@ from pathlib import Path
 
 import argparse
 import logging
+import math
 
 # CSV
 import csv
@@ -10,7 +11,7 @@ import csv
 # FTP
 import ftplib
 
-line = '=' * 70
+line = '=' * 72
 
 def prompt(header, ask, response_type='int', main_dict=None, menu_dict=None):
     # Function to prompt the user for an argument that was not passed when calling the program
@@ -24,6 +25,8 @@ def prompt(header, ask, response_type='int', main_dict=None, menu_dict=None):
             print(f'{line}\n{header}\n{len(header) * "-"}\n')
             if main_dict or menu_dict:
                 d = menu_dict if menu_dict else main_dict
+                # determine the length of the dictionary for right justification in the user prompt menu
+                right_j = int(math.log10(len(d))) + 1   
                 counter = 0
 
                 for k,v in d.items():
@@ -32,10 +35,9 @@ def prompt(header, ask, response_type='int', main_dict=None, menu_dict=None):
                     if counter == 4:
                         end_with = '\n'
                         counter = -1
-                    print(f'{k} : {v}', end=end_with)
+                    print(f'{str(k).rjust(right_j)} : {v}', end=end_with)
                     counter += 1
 
-            print()
             answer = input(f'{ask}')
 
             # if prompt is expecting an answer that is an integer or string
@@ -61,8 +63,8 @@ def prompt(header, ask, response_type='int', main_dict=None, menu_dict=None):
 
 
 if __name__ == '__main__':
-    prog_desc = 'purpose: transfer file to or from a host that is behind a UNIX gateway. unless specified (as binary), file will be treated as ASCII.'
-    choice_text = 'Your choice: '
+    prog_desc = 'purpose: transfer file to or from a host that is behind a UNIX gateway. unless specified (as BINARY), file will be treated as ASCII.'
+    choice_text = '\n\nYour choice: '
     action = {1 : 'download', 2 : 'upload'}
     
     parser = argparse.ArgumentParser(description=prog_desc, add_help=False)
@@ -125,9 +127,6 @@ if __name__ == '__main__':
         instance_menu[counter] = item
         counter += 1
     
-    # print(f'menu dict: {instance_menu}')
-    # print(f'instances hosts: {client_accounts}')
-
     # =====================================================================================================================================
     # parse the csv (gateway_hosts.csv) for UNIX gateway information
     filename = 'gateway_hosts.csv'
@@ -155,7 +154,12 @@ if __name__ == '__main__':
 
 
     # =====================================================================================================================================
-    
+
+    if not (args.gateway and args.username and args.passcode and args.instance and args.action):
+        logging.info('Missing arguments...')
+    else:
+        logging.info('All arguments supplied')
+ 
     # parser.add_argument('-b', '--binary', help='if not specified, file will be treated as ASCII', action='store_true')
     # parser.add_argument('-p', '--passcode', help='MobilePASS OHGate - IDLDAP.NET passcode')
     # parser.add_argument('-a', '--action', help='download or upload')
@@ -178,47 +182,50 @@ if __name__ == '__main__':
     # if no --instance argument passed
     if not args.instance:
         args.instance = prompt(header='Instance', ask=choice_text, main_dict= client_accounts, menu_dict=instance_menu)
+    
+    FTPhost, FTPpwd, clientID = client_accounts[args.instance]
 
     # if no --action argument passed
     if not args.action:
         args.action = prompt(header='Action', ask=choice_text, main_dict=action)
 
-    print(f'Gateway: {args.gateway}')
-    print(f'Server: {args.instance[0]}')
-    print(f'Password: {args.instance[1]}')
-    print(f'ClientID: {args.instance[2]}')
-
-    # FTP
-    ftp_host = 'lit-vabld-q023.gxsonline.net'
-    # ftp_host = 'ohmg0005.ohctr.gxs.com'
-    ftp_user = 'art'
-    ftp_passwd = 'art123'
-
+    # print(line)
 
     print(line)
-    logging.info(f'Connecting to {ftp_host}:21...')
+    logging.info(f'Connecting to {args.gateway}...')
 
-    with ftplib.FTP(host=ftp_host) as ftp:
+    with ftplib.FTP(host=args.gateway) as ftp:
         try:
-            ftp.login(user=ftp_user, passwd=ftp_passwd)
-            logging.info('Connection established, waiting for welcome message...')
-            # ftp.cwd('/qual/art/ot/otdev/dev5.3/art')
-            ftp.getwelcome()
-            logging.info('Logged in...')
+            logging.info(f'Connected. Waiting for welcome message...')
+            print(ftp.getwelcome())
+            ftp.login(user=args.username, passwd=args.passcode)
+            logging.info(f'User {args.username} logged in.')
+            
+            
+            ftp.sendcmd(f'USER {args.instance}@{FTPhost}')
+            ftp.sendcmd(f'PASS {FTPpwd}')
+            ftp.cwd(f'aiprod{clientID}/implementor/{args.username}')
+            ftp.retrlines('LIST')
+            # logging.info('Logged in...')
 
             if args.binary:
+                mode = 'Binary'
                 ftp.sendcmd('TYPE I')
             else:
+                mode = 'ASCII'
                 ftp.sendcmd('TYPE A')
+            logging.info(f'Switching to {mode} mode.')
             # ftp.retrlines('LIST')
             
             logging.info(f'Starting {args.action} of {args.file}')
 
             with open(args.file, 'w') as new_file:
-                result = ftp.retrbinary(f'RETR {args.file}', new_file.write)
+                # result = ftp.retrbinary(f'RETR {args.file}', new_file.write)
+                result = ftp.retrlines(f'RETR {args.file}', new_file.write)
+                logging.info('File downloaded')
         except ftplib.all_errors as e:
             logging.info(f'FTP error: {e}')
         else:
-            print('Disconnected from server')
+            logging.info('Goodbye')
 
-    logging.info('end')
+    logging.info('End of program')
