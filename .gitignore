@@ -108,5 +108,6 @@ venv.bak/
 
 # my notes and sample files
 file-transfer_notes.txt
-file
-test.txt
+download.txt
+upload.txt
+gateway_hosts.new.csv
