@@ -110,4 +110,7 @@ venv.bak/
 file-transfer_notes.txt
 download.txt
 upload.txt
-gateway_hosts.new.csv
+download.tar.gz
+gateway_hosts.real.csv
+servers.real.csv
+MS_client_accounts.real.csv
