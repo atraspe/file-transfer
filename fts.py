@@ -188,7 +188,7 @@ if __name__ == '__main__':
 
     # if --ms was not invoked in the argument, ask if user wants to transfer files to/from MS or non-MS host
     if not args.ms:
-        FTPhost = ask_user(prompt='\nHost you want to transfer files to/from: ', header='Connect to', main_dict=hosts_options, menu_dict=hosts_menu)
+        FTPhost = ask_user(prompt='\n\nHost you want to transfer files to/from: ', header='Connect to', main_dict=hosts_options, menu_dict=hosts_menu)
         # update args.ms if user wants to connect to MS host; in preparation for next
         if FTPhost == 'Managed Services':
             args.ms = True
@@ -204,6 +204,9 @@ if __name__ == '__main__':
         else:
             # if --ms and --instance argument passed, then look up for the values in the client_accounts dictionary
             FTPhost, FTPpwd, clientID = client_accounts[args.instance]
+        
+        FTPdir = f'aiprod{clientID}/implementor/{args.username}'
+
     else:
         # if user wants to transfer a file to/from a non-MS host, ask for more details
         args.instance = ask_user(prompt=username_text, header=f'Credentials for {FTPhost}', response_type='str')
@@ -212,10 +215,6 @@ if __name__ == '__main__':
 
     # update FTPUser
     FTPUser = args.instance
-
-    print(f'ftp host: {FTPhost}')
-    print(f'ftp user: {FTPUser}')
-    print(f'ftp pwd: {FTPpwd}')
 
     # ask if user wants to download or upload file
     if not args.action:
@@ -233,19 +232,25 @@ if __name__ == '__main__':
                 logging.info(f'Connection established, waiting for welcome message...')
                 print(ftp.getwelcome())
                 logging.info('When prompted, please approve the sign-in request in your "VIP Access" mobile/desktop app...')
+
+                # login to the chosen UNIX gateway
                 ftp.login(user=args.username, passwd=args.passcode)
-                logging.info(f'User {args.username} logged in to {args.gateway}')
+                logging.info(f'User {args.username} logged in to UNIX gateway: {args.gateway}')
+
                 
+                # login to the chose host (MS or non-MS)
                 ftp.sendcmd(f'USER {FTPUser}@{FTPhost}')
                 ftp.sendcmd(f'PASS {FTPpwd}')
-                logging.info(f'Logged in to {FTPhost}')
+                host = f'MS host: ' if args.ms else f'non-MS host: '
+                logging.info(f'Logged in to {host}{FTPhost}')
 
-                # by default, will use the aiprod{clientID}/implementor/{args.username} directory name
-                logging.info(f'By default, will transfer files to/from aiprod<clientID>/implementor/<username> directory')
-                logging.info('If uploading, directory will be created if non-existent')
+                if args.ms:
+                    # by default, will use the aiprod{clientID}/implementor/{args.username} directory name
+                    logging.info(f'By default, will transfer files to/from aiprod<clientID>/implementor/<username> directory')
+                    logging.info('If uploading, directory will be created if non-existent')
 
-                ftp.cwd(f'aiprod{clientID}/implementor/{args.username}')
-                logging.info(f'Changed directory to: aiprod{clientID}/implementor/{args.username}')            
+                ftp.cwd(FTPdir)
+                logging.info(f'Changed directory to: {FTPdir}')
 
                 logging.info('Switching to Binary mode.')
                 ftp.sendcmd('TYPE I')
