@@ -129,13 +129,13 @@ if __name__ == '__main__':
     
     
     parser = argparse.ArgumentParser(description=prog_desc, add_help=False)
-    parser.add_argument('file', help='file to be transferred')
     parser.add_argument('-g', '--gateway', help='UNIX gateway to be used')
     parser.add_argument('-u', '--username', help='Gateway username')
     parser.add_argument('-p', '--passcode', help='IDLDAP.net password')
     parser.add_argument('-m', '--ms', help='transfer to Managed Services hosts', action='store_true')
     parser.add_argument('-i', '--instance', help='Managed Services client instance')
     parser.add_argument('-a', '--action', help='download or upload')
+    parser.add_argument('-f', '--file', nargs='*', help='file(s) to be transferred')
     parser.add_argument('-v', '--verbose', help='explain what is being done', action='store_const', const=logging.INFO, dest='loglevel')
     parser.add_argument('-h', '--help', help='show this help message and exit', action='help')
 
@@ -147,6 +147,9 @@ if __name__ == '__main__':
     print(line)
     logging.info(f'Executing {__file__}...')
     logging.info('Loading configuration...')
+
+    # print(args.file)
+    # sys.exit()
 
     # =====================================================================================================================================
     # parse the csv file for UNIX gateway information
@@ -226,7 +229,6 @@ if __name__ == '__main__':
 
     try:
         with ftplib.FTP(host=args.gateway) as ftp:
-            file_orig = args.file
 
             try:
                 logging.info(f'Connection established, waiting for welcome message...')
@@ -254,30 +256,34 @@ if __name__ == '__main__':
 
                 logging.info('Switching to Binary mode.')
                 ftp.sendcmd('TYPE I')
-                logging.info(f'Starting {args.action} of {file_orig}')
-                
-                if args.action == 'download':
-                    # downloading
-                    with open(file_orig, 'wb') as new_file:
-                        ftp.retrbinary(f'RETR {file_orig}', new_file.write)
-                else:
-                    # uploading
-                    with open(file_orig, 'rb') as new_file:
-                        ftp.storbinary(f'STOR {file_orig}', new_file)
-                
-                logging.info(f'File transfer successful, transferred {ftp.size(file_orig)} bytes')
+
+                for next_file in args.file:
+                    logging.info('-' * 40)
+                    logging.info(f'Starting {args.action} of {next_file}')
+                    
+                    if args.action == 'download':
+                        # downloading
+                        with open(next_file, 'wb') as new_file:
+                            ftp.retrbinary(f'RETR {next_file}', new_file.write)
+                    else:
+                        # uploading
+                        with open(next_file, 'rb') as new_file:
+                            ftp.storbinary(f'STOR {next_file}', new_file)
+                    
+                    logging.info(f'File transfer successful, transferred {ftp.size(next_file)} bytes')
             
             except ftplib.all_errors as e:
                 logging.info(f'FTP error: {e}')
 
                 if args.action == 'download':
-                    local_file = Path(file_orig)
+                    local_file = Path(next_file)
                     if local_file.exists():
                         # in case of failure, delete the local file
                         logging.info('Download failed. Deleting local copy...')
                         local_file.unlink()
 
             else:
+                logging.info('-' * 40)
                 logging.info('No error encountered')
                 ftp.close()
                 logging.info('Connection closed')
