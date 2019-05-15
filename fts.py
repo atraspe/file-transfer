@@ -9,7 +9,8 @@ import csv
 # FTP
 import ftplib
 
-line = '=' * 72
+equal_sign_line = '=' * 72
+dash_line = '-' * 47
 
 def ask_user(prompt, header=None, ask_again=None, response_type='int', main_dict=None, menu_dict=None, echo=True):
     # function to ask user for an argument that was not passed when calling the program
@@ -21,7 +22,7 @@ def ask_user(prompt, header=None, ask_again=None, response_type='int', main_dict
     while True:
         try:
             if header:
-                print(f'{line}\n{header}\n{len(header) * "-"}\n')
+                print(f'{equal_sign_line}\n{header}\n{len(header) * "-"}\n')
             
             if main_dict or menu_dict:
                 d = menu_dict if menu_dict else main_dict
@@ -29,6 +30,7 @@ def ask_user(prompt, header=None, ask_again=None, response_type='int', main_dict
                 right_j = int(math.log10(len(d))) + 1   
                 counter = 0
 
+                # diplay the user menu
                 for k,v in d.items():
                     end_with = '\n' if counter == 4 else '\t'
                     
@@ -53,7 +55,7 @@ def ask_user(prompt, header=None, ask_again=None, response_type='int', main_dict
 
             # if no dictionary is passed (e.g. Username), then return that user input        
             choice = answer
-
+            
             if menu_dict:
                 choice_tmp = menu_dict[answer]
                 answer = choice_tmp
@@ -144,12 +146,9 @@ if __name__ == '__main__':
     # Logging; does not include the levelname(severity) in the messages, only the date/time stamp and message
     logging.basicConfig(level=args.loglevel, format='%(asctime)s - %(message)s', datefmt='%Y-%m-%d %I:%M:%S %p')
 
-    print(line)
+    print(equal_sign_line)
     logging.info(f'Executing {__file__}...')
     logging.info('Loading configuration...')
-
-    # print(args.file)
-    # sys.exit()
 
     # =====================================================================================================================================
     # parse the csv file for UNIX gateway information
@@ -189,10 +188,10 @@ if __name__ == '__main__':
     if not args.passcode:
         args.passcode = ask_user(prompt='Enter IDLDAP.net Password: ', header='IDLDAP.net Password', response_type='str', echo=False)
 
-    # if --ms was not invoked in the argument, ask if user wants to transfer files to/from MS or non-MS host
+    # if --ms was not invoked in the argument, ask if user wants to transfer files to/from a MS or non-MS host
     if not args.ms:
         FTPhost = ask_user(prompt='\n\nHost you want to transfer files to/from: ', header='Connect to', main_dict=hosts_options, menu_dict=hosts_menu)
-        # update args.ms if user wants to connect to MS host; in preparation for next
+        # update args.ms if 'Managed Services' was chosen ; then ask for more information if needed
         if FTPhost == 'Managed Services':
             args.ms = True
 
@@ -206,8 +205,16 @@ if __name__ == '__main__':
             FTPhost, FTPpwd, clientID = ask_user(prompt=choice_text, header='Managed Service Instance', main_dict=client_accounts, menu_dict=instance_menu)
         else:
             # if --ms and --instance argument passed, then look up for the values in the client_accounts dictionary
-            FTPhost, FTPpwd, clientID = client_accounts[args.instance]
-        
+            try:
+                FTPhost, FTPpwd, clientID = client_accounts[args.instance]
+            except KeyError:
+                logging.info(f'The MS instance {args.instance} passed as argument is unrecognized.')
+                logging.info('Check MS_client_accounts.csv. If not there, please add client account info.')
+                logging.info('Exiting script...')
+                print(equal_sign_line)
+                sys.exit()
+
+        # for MS hosts, set FTPdir to default directory
         FTPdir = f'aiprod{clientID}/implementor/{args.username}'
 
     else:
@@ -224,8 +231,10 @@ if __name__ == '__main__':
         args.action = ask_user(prompt=choice_text, header='You want to', main_dict=action)
     
     
-    print(line)
+    print(equal_sign_line)
     logging.info(f'Connecting to {args.gateway}...')
+    downloaded = True
+    uploaded = True
 
     try:
         with ftplib.FTP(host=args.gateway) as ftp:
@@ -240,60 +249,66 @@ if __name__ == '__main__':
                 logging.info(f'User {args.username} logged in to UNIX gateway: {args.gateway}')
 
                 
-                # login to the chose host (MS or non-MS)
+                # login to the chosen host (MS or non-MS)
                 ftp.sendcmd(f'USER {FTPUser}@{FTPhost}')
                 ftp.sendcmd(f'PASS {FTPpwd}')
+
                 host = f'MS host: ' if args.ms else f'non-MS host: '
                 logging.info(f'Logged in to {host}{FTPhost}')
 
                 if args.ms:
-                    # by default, will use the aiprod{clientID}/implementor/{args.username} directory name
-                    logging.info(f'By default, will transfer files to/from aiprod<clientID>/implementor/<username> directory')
-                    logging.info('If uploading, directory will be created if non-existent')
-
+                    # on MS hosts by default, use the aiprod{clientID}/implementor/{args.username} directory
+                    logging.info(f'By default, transferring files to/from aiprod<clientID>/implementor/<username> directory')
+                
+                logging.info(f'Currently in {ftp.pwd()}')
+                
+                logging.info(f'Changing to directory: {FTPdir}')
                 ftp.cwd(FTPdir)
-                logging.info(f'Changed directory to: {FTPdir}')
-
+                
                 logging.info('Switching to Binary mode.')
                 ftp.sendcmd('TYPE I')
 
                 for next_file in args.file:
-                    logging.info('-' * 40)
+                    downloaded = False
+                    uploaded = False
+                    logging.info(dash_line)
                     logging.info(f'Starting {args.action} of {next_file}')
                     
                     if args.action == 'download':
                         # downloading
                         with open(next_file, 'wb') as new_file:
                             ftp.retrbinary(f'RETR {next_file}', new_file.write)
+                            downloaded = True
                     else:
                         # uploading
                         with open(next_file, 'rb') as new_file:
                             ftp.storbinary(f'STOR {next_file}', new_file)
+                            uploaded = True
                     
-                    logging.info(f'File transfer successful, transferred {ftp.size(next_file)} bytes')
+                    if downloaded or uploaded:
+                        logging.info(f'File transfer successful, transferred {ftp.size(next_file)} bytes')
             
             except ftplib.all_errors as e:
                 logging.info(f'FTP error: {e}')
 
-                if args.action == 'download':
+                if args.action == 'download' and not downloaded:
+                    # in case of download failure, delete the local file
                     local_file = Path(next_file)
                     if local_file.exists():
-                        # in case of failure, delete the local file
                         logging.info('Download failed. Deleting local copy...')
                         local_file.unlink()
-
-            else:
-                logging.info('-' * 40)
-                logging.info('No error encountered')
-                ftp.close()
-                logging.info('Connection closed')
+            
+            # continue here if no error from try-except
+            logging.info(dash_line)
+            ftp.close()
+            logging.info('FTP connection closed')
 
     except ftplib.all_errors as e:
         logging.info('Error connecting to gateway...')
         logging.info(e)
         logging.info('Check that you\'re connected to the company\'s VPN')
         
-    
+    # continue here if no error from try-except
     logging.info('Disconnected from server')
     logging.info('End of script, thank you!')
-    print(line)
+    print(equal_sign_line)
