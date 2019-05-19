@@ -20,12 +20,22 @@ import math
 import getpass
 import csv
 import ftplib
+import contextlib
 from pathlib import Path
 from datetime import datetime
 
 # some global variables
 equal_sign_line = '=' * 72
 dash_line = '-' * 47
+
+class Error(Exception):
+    """Base class for exceptions"""
+    pass
+
+
+class EmptyInputError(Error):
+    """Exception raised if user just pressed enter when prompted to input something"""
+    pass
 
 
 def ask_user(prompt, header=None, response_type='int', main_dict=None, menu_dict=None, echo=True):
@@ -76,6 +86,9 @@ def ask_user(prompt, header=None, response_type='int', main_dict=None, menu_dict
             else:
                 answer = input(f'{prompt}')
 
+            if not answer:
+                raise EmptyInputError
+
             # depends on response_type parameter if expecting
             # an answer that is an integer or string
             if response_type == 'str':
@@ -99,8 +112,11 @@ def ask_user(prompt, header=None, response_type='int', main_dict=None, menu_dict
                 # instance id chosen from menu should be assigned to args.instance
                 args.instance = choice_tmp
 
-        except (ValueError, KeyError) as err:
+        except (ValueError, KeyError):
             print('\n!!! Invalid selection...\n')
+
+        except EmptyInputError:
+            print('\n!!! Can\'t be empty. Please enter a valid value...\n')
 
         else:
             print()
@@ -122,8 +138,8 @@ def parse_csv(filename, sort=False):
     file = Path(filename)
     if not file.exists():
         print(
-            f'{date_time_stamp} - One of the configuration files ({filename}) does not exist!')
-        print(f'{date_time_stamp} - Terminating script...')
+            f'{date_time_stamp()} - One of the configuration files ({filename}) does not exist!')
+        print(f'{date_time_stamp()} - Terminating script...')
         sys.exit()
 
     csv_file = open(filename, newline='')
@@ -182,7 +198,7 @@ if __name__ == '__main__':
     action = {1: 'download', 2: 'upload'}
 
     # if --verbose not invoked, then format date/time stamp similar to that of the verbose log
-    date_time_stamp = datetime.now().strftime("%Y-%m-%d %I:%M:%S %p")
+    date_time_stamp = lambda: datetime.now().strftime("%Y-%m-%d %I:%M:%S %p")
 
     parser = argparse.ArgumentParser(description=prog_desc, add_help=False)
     parser.add_argument('-g', '--gateway', help='UNIX gateway to be used')
@@ -209,7 +225,7 @@ if __name__ == '__main__':
 
     print(equal_sign_line)
     logging.info(f'Executing {__file__}...')
-    print(f'{date_time_stamp} - Loading configuration...')
+    print(f'{date_time_stamp()} - Loading configuration...')
 
     # =========================================================================
     # parse the csv file for UNIX gateway information
@@ -226,7 +242,7 @@ if __name__ == '__main__':
     ms_client_csv = 'MS_client_accounts.real.csv'
     client_accounts, instance_menu = parse_csv(ms_client_csv, sort=True)
 
-    if args.gateway and args.username and args.instance and args.action:
+    if args.gateway and args.username and args.passcode and args.instance and args.action and args.file:
         logging.info('All required arguments passed')
 
     # determine which parameters were not passed when calling the program
@@ -241,7 +257,7 @@ if __name__ == '__main__':
     elif args.gateway not in gateway_hosts.values():
         # if gateway argument passed is not recognized, then ask user for choice
         if args.gateway:
-            print(f'{date_time_stamp} - Unrecognized gateway: {args.gateway}')
+            print(f'{date_time_stamp()} - Unrecognized gateway: {args.gateway}')
 
         args.gateway = ask_user(prompt=choice_text, header='Gateway',
                                 main_dict=gateway_hosts, menu_dict=gateways_menu)
@@ -278,10 +294,10 @@ if __name__ == '__main__':
                 FTPhost, FTPpwd, clientID = client_accounts[args.instance]
             except KeyError:
                 print(
-                    f'{date_time_stamp} - The MS instance {args.instance} passed as argument is unrecognized.')
+                    f'{date_time_stamp()} - The MS instance {args.instance} passed as argument is unrecognized.')
                 print(
-                    f'{date_time_stamp} - Check MS_client_accounts.csv. If not there, please add client account info.')
-                print(f'{date_time_stamp} - Exiting script...')
+                    f'{date_time_stamp()} - Check MS_client_accounts.csv. If not there, please add client account info.')
+                print(f'{date_time_stamp()} - Exiting script...')
                 print(equal_sign_line)
                 sys.exit()
 
@@ -301,37 +317,29 @@ if __name__ == '__main__':
     FTPUser = args.instance
 
     # ask if user wants to download or upload file
-    if args.action not in ['download', 'upload']:
-        print(f'{date_time_stamp} - You passed an action argument that is not valid: {args.action}')
+    if args.action and args.action.lower() not in ['download', 'upload']:
+        print(
+            f'{date_time_stamp()} - You passed an action argument that is not valid: {args.action}')
         args.action = None
     if not args.action:
         args.action = ask_user(
             prompt=choice_text, header='You want to', main_dict=action)
 
-
     # if not specified in the argument, ask user for file(s) to transfer
+    # then split and append to a list
     if not args.file:
-        temp_file = ask_user(
+        temp_files = ask_user(
             prompt=f'Please specify filename(s) separated by a space: ', header=f'Files to {args.action}', response_type='str'
         )
-        args.file = temp_file.split(' ')
-
+        files = temp_files.split(' ')
+        args.file = [file for file in files if file]
 
     print(equal_sign_line)
 
-    # initialize some flags prior to establishing connection to UNIX gateway
+    # initialize flag prior to establishing connection with the UNIX gateway
     logged_gateway = False
-
-    # logged_host initially is True. will be used later in the exception
-    # to display the host login error messages
-    logged_host = True
-
-    changed_dir = False
-
-    downloaded = True
-    uploaded = True
-
-    print(f'{date_time_stamp} - Connecting to {args.gateway}...')
+    
+    print(f'{date_time_stamp()} - Connecting to {args.gateway}...')
 
     with ftplib.FTP(host=args.gateway) as ftp:
         logging.info(f'Connection established, waiting for welcome message...')
@@ -339,22 +347,24 @@ if __name__ == '__main__':
         if welcome:
             logging.info(f'A message from the server\n{ftp.getwelcome()}')
         print(
-            f'{date_time_stamp} - When prompted, please approve the sign-in request in your "VIP Access" mobile/desktop app...')
+            f'{date_time_stamp()} - When prompted, please approve the sign-in request in your "VIP Access" mobile/desktop app...')
 
         try:
             # login to the chosen UNIX gateway
             ftp.login(user=args.username, passwd=args.passcode)
             print(
-                f'{date_time_stamp} - User {args.username} logged in to UNIX gateway: {args.gateway}')
+                f'{date_time_stamp()} - User {args.username} logged in to UNIX gateway: {args.gateway}')
             logged_gateway = True
 
             # login to the chosen host (MS or non-MS)
+            logged_host = False
             host = f'MS host' if args.managedservices else f'non-MS host'
             logging.info(f'Logging in to the {host}...')
             ftp.sendcmd(f'USER {FTPUser}@{FTPhost}')
             ftp.sendcmd(f'PASS {FTPpwd}')
-            print(f'{date_time_stamp} - Logged in to {host}: {FTPUser}@{FTPhost}')
+            print(f'{date_time_stamp()} - Logged in to {host}: {FTPUser}@{FTPhost}')
             logged_host = True
+            
 
             if args.managedservices:
                 # on MS hosts, by default, use the aiprod{clientID}/implementor/{args.username} directory
@@ -362,7 +372,8 @@ if __name__ == '__main__':
                     f'By default, transferring files to/from aiprod<clientID>/implementor/<username> directory')
 
             logging.info(f'Currently in {ftp.pwd()}')
-            print(f'{date_time_stamp} - Changing directory to: {FTPdir}')
+            print(f'{date_time_stamp()} - Changing directory to: {FTPdir}')
+            changed_dir = False
             ftp.cwd(FTPdir)
             changed_dir = True
 
@@ -372,8 +383,8 @@ if __name__ == '__main__':
             for next_file in args.file:
                 downloaded = False
                 uploaded = False
-                print(f'{date_time_stamp} - {dash_line}')
-                print(f'{date_time_stamp} - Starting {args.action} of {next_file}')
+                print(f'{date_time_stamp()} - {dash_line}')
+                print(f'{date_time_stamp()} - Starting {args.action} of {next_file}')
 
                 if args.action == 'download':
                     # downloading
@@ -388,44 +399,49 @@ if __name__ == '__main__':
 
                 if downloaded or uploaded:
                     print(
-                        f'{date_time_stamp} - File transfer successful, transferred {ftp.size(next_file)} bytes')
+                        f'{date_time_stamp()} - File transfer successful, transferred {ftp.size(next_file)} bytes')
 
-            print(f'{date_time_stamp} - {dash_line}')
+            print(f'{date_time_stamp()} - {dash_line}')
+
 
         except ftplib.all_errors:
             if not logged_gateway:
                 print(
-                    f'{date_time_stamp} - Error connecting to the UNIX gateway {args.gateway}')
+                    f'{date_time_stamp()} - Error connecting to the UNIX gateway {args.gateway}')
                 print(
-                    f'{date_time_stamp} - Please double check your IDLDAP.net credentials (username and/or password)...')
+                    f'{date_time_stamp()} - Please double check your IDLDAP.net credentials (username and/or password)...')
                 print(
-                    f'{date_time_stamp} - Also, check that you\'re connected to the company\'s VPN')
+                    f'{date_time_stamp()} - Also, check that you\'re connected to the company\'s VPN')
 
-            if not logged_host:
-                print(
-                    f'{date_time_stamp} - Host login incorrect! {FTPUser}@{FTPhost} ')
-                print(
-                    f'{date_time_stamp} - Please double check your credentials (username and/or password) in {ms_client_csv}...')
-
-            if not changed_dir:
-                print('{date_time_stamp} - Changing directory error...')
-                print(
-                    f'{date_time_stamp} - Please check if {FTPdir} exists in the MS host...')
-
-            if args.action == 'download' and not downloaded:
-                # in case of download failure, delete the local file
-                local_file = Path(next_file)
-                if local_file.exists():
+            # if there was an error logging into the gateway (handled above),
+            # the below flags would not have been initialized yet so they'll throw the NameError exception
+            # this is just to suppress that scenario and to prevent the script from terminating
+            with contextlib.suppress(NameError):
+                if not logged_host:
                     print(
-                        f'{date_time_stamp} - Download failed. Deleting local copy...')
-                    local_file.unlink()
-                    print(f'{date_time_stamp} - {dash_line}')
+                        f'{date_time_stamp()} - Host login incorrect! {FTPUser}@{FTPhost} ')
+                    print(
+                        f'{date_time_stamp()} - Please double check your credentials (username and/or password) in {ms_client_csv}...')
+
+                if not changed_dir:
+                    print(f'{date_time_stamp()} - Error changing to that directory...')
+                    print(
+                        f'{date_time_stamp()} - Please check if {FTPdir} exists in the MS host...')
+
+                if args.action == 'download' and not downloaded:
+                    # in case of download failure, delete the local file
+                    local_file = Path(next_file)
+                    if local_file.exists():
+                        print(
+                            f'{date_time_stamp()} - Download failed. Deleting local copy...')
+                        local_file.unlink()
+                        print(f'{date_time_stamp()} - {dash_line}')
 
         finally:
             # clean-up actions
             ftp.close()
             logging.info('FTP connection closed')
             logging.info('Disconnected from server')
-            print(f'{date_time_stamp} - End of program')
-            print(f'{date_time_stamp} - Thank you for using the script!')
+            print(f'{date_time_stamp()} - End of program')
+            print(f'{date_time_stamp()} - Thank you for using the script!')
             print(equal_sign_line)
