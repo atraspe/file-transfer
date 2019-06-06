@@ -1,0 +1,28 @@
+{
+	"fts_config": {
+		"gateway" : {
+			"username" : "g4t3us3r",
+			"password" : "g4t3p4ssw0rd"
+		},
+		"csv": {
+			"csv_dir": "config",
+			"csv_files": [{
+					"gateway_hosts": "gateway_hosts_sample.csv"
+				},
+				{
+					"ms_client_accounts": "ms_client_accounts_sample.csv"
+				},
+				{
+					"non_ms_servers": "non_ms_servers_sample.csv"
+				},
+				{
+					"server_group": "server_group_sample.csv"
+				}
+			]
+		},
+        "log" : {
+            "log_suffix" : "_fts.log",
+    		"log_dir": "logs"
+        }
+	}
+}
