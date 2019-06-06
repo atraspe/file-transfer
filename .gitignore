@@ -52,7 +52,7 @@ coverage.xml
 *.pot
 
 # Django stuff:
-*.log
+# *.log
 local_settings.py
 db.sqlite3
 
@@ -111,6 +111,12 @@ file-transfer_notes.txt
 download.txt
 upload.txt
 download.tar.gz
-gateway_hosts.real.csv
-servers.real.csv
-MS_client_accounts.real.csv
+config/gateway_hosts.csv
+config/server_group.csv
+config/ms_client_accounts.csv
+config/non_ms_servers.csv
+logs/fts.log
+simple_logging_module.py
+fts.json
+fts.conf
+notes.txt
