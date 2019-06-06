@@ -1,0 +1,46 @@
+2019-06-06 03:28:04 PM - INFO - ========================================================================
+2019-06-06 03:28:04 PM - INFO - Connecting to the Nipon Gate (nipon-gate.internal.net)...
+2019-06-06 03:28:04 PM - INFO - Connection established!
+2019-06-06 03:28:04 PM - INFO - A message from the server:
+220- ************************************************************************
+220-                            NOTICE TO USERS
+220- This system is the property of CompanyA. It is intended  for  authorized
+220- business-related usage and is subject to  restrictions  imposed  by  all
+220- applicable laws and CompanyA policies. CompanyA reserves the  right,  to
+220- the full extent allowed by law, to monitor and record use of this system
+220- and any devices accessing it, including e-mail and Internet access,  and
+220- to use, as appropriate, information obtained  from  such  monitoring  in
+220- connection with investigations, litigation, and/or employee disciplinary
+220- matters.
+220- ************************************************************************
+220-     Unix Gate Wiki can be found at:  http://go.CompanyA.com/unixgate
+220-    (To diagnose a problem with your MobilePASS token see Wiki item 6)
+220- ************************************************************************
+220- 
+220- nipon-gate.internal.net PROXY-FTP server ready.
+220- 
+220- At the ftp> prompt enter: user username@remotehost
+220- 
+220-extended FTP [MODE XDC][XDC/BASE64]
+220  
+2019-06-06 03:28:04 PM - INFO - When prompted, please approve the sign-in request in your "VIP Access" mobile/desktop app...
+2019-06-06 03:28:12 PM - INFO - User g4t3us3r logged in
+2019-06-06 03:28:12 PM - INFO - Logging in to the MS host...
+2019-06-06 03:28:12 PM - INFO - Logged in: instance1@nipon01.internal.net
+2019-06-06 03:28:12 PM - INFO - By default, transferring files to/from XRADI/implementor/g4t3us3r
+2019-06-06 03:28:12 PM - INFO - Currently in /prep/b701/ia/env
+2019-06-06 03:28:12 PM - INFO - Changing directory to: XRADI/implementor/g4t3us3r
+2019-06-06 03:28:12 PM - INFO - Switching to Binary mode.
+2019-06-06 03:28:12 PM - INFO - -----------------------------------------------
+2019-06-06 03:28:12 PM - INFO - Starting download of file2...
+2019-06-06 03:28:13 PM - ERROR - file2 does not exist in XRADI/implementor/g4t3us3r !
+2019-06-06 03:28:13 PM - INFO - Download failed. Deleting local copy...
+2019-06-06 03:28:13 PM - INFO - -----------------------------------------------
+2019-06-06 03:28:13 PM - INFO - FTP connection closed
+2019-06-06 03:28:13 PM - INFO - Disconnected from server
+2019-06-06 03:28:13 PM - WARNING - Terminating script...
+2019-06-06 03:28:13 PM - INFO - End of program
+2019-06-06 03:28:13 PM - INFO - Logged everything in logs\fts.sample.log
+2019-06-06 03:28:13 PM - INFO - Thank you for using the script!
+2019-06-06 03:28:13 PM - INFO - SCRIPT LOG - End
+2019-06-06 03:28:13 PM - INFO - ========================================================================
