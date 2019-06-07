@@ -300,11 +300,15 @@ class FtpConnection():
 
 
 def set_console_handler(level):
-    """Function to set the StreamHandler
+    """Function to set the StreamHandler log handler
     
     Argument:
     level() - 
+
+    Returns:
+    console_handler (StreamHandler object): log handler that writes to the console
     """
+
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(FORMATTER)
     console_handler.setLevel(level)
@@ -312,14 +316,23 @@ def set_console_handler(level):
 
 
 def set_file_handler():
+    """Function to set the FileHandler log handler
+        
+    Returns:
+    file_handler (FileHandler object): log handler that writes to the log file
+    """
+
     file_handler = logging.FileHandler(LOG_FILE)
     file_handler.setFormatter(FORMATTER)
     return file_handler
 
 
 def get_logger(name, level=logging.DEBUG):
-    global logger
-
+    """Function to create the log handler
+    
+    Returns:
+    logger (Logger object): Logger object with FileHandler and StreamHandler objects
+    """
     # create a custom logger
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
