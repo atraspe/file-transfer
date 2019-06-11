@@ -29,9 +29,10 @@ $ python fts.py -g ohio -s ms -i instance1 -a download --file file1 file2 --verb
 You can "personalize" this script by updating the JSON config file of the Unix gateway username and password, which the script will use by default. You can always override the JSON values by passing the --username argument.
 
 ## Motivation
-My daily task at work involves file transfers to and from hosts that are located behind a UNIX gateway. That means one action involves a 3-step process: 1) UNIX gate login, 2) remote host login, and finally 3) file transfer. This requires a lot of manual and repetitive work (e.g. specify which gateway to use, which FTP host to connect to, supply client-specific login info, directory to transfer files to/from, the files to be transferred, etc.), which is not only cumbersome but also boring. So it got me thinking, why not automate this task? This is the result of that curiosity.
+Part of the daily job activities involves file transfers to and from hosts that are located behind a UNIX gateway. That means one action involves a 3-step process: 1) UNIX gate login, 2) remote host login, and finally 3) file transfer. This requires a lot of manual and repetitive work (e.g. specify which gateway to use, which FTP host to connect to, supply client-specific login info, directory to transfer files to/from, the files to be transferred, etc.). If it's just a host or two, that's fine but when we're talking about hundreds of them, it becomes cumbersome because you need to keep track of the different hostnames, credentials, and other necessary information. So it got me thinking, why not automate this task? This is the result of that curiosity.
+
 This script serves as a template with which you can adjust to how your environment is setup. I've set it up to store some of my credentials in the JSON file but this script is also meant to ask you of those information.
-You may ask, why not use one of those already available FTP tools? To which I say, well, where's the fun in that? :)
+You may ask, why not use one of those already available FTP tools? To which I will say, well, where's the fun in that? :)
 
 ### What I've learned:
 Disclaimer: I do not have any professional background in programming nor software engineering. That said, this is part of an initiative to get my hands dirty (coding!) to grow and build my technical skills and gain practical experience. Creating this script is part of an on-going effort to self study Python programming language - get the basics down and start building mini projects (and deliver value) to cement my learning. Just taking advantage of its use for automating some of my daily tasks and frankly, I'm just having fun learning :)
@@ -47,6 +48,8 @@ Since this is my first real-world/automation project using Python, it's an under
 
 - OOP. Midway through development, I decided to take the OOP path. It's daunting at first but it was a nice introduction to putting the knowledge into practice. I know when I learn more about the power of OOP, I'll be able to better my initial approach.
 
+- Reasearch and problem solving. Tons of it. The ability to scour the web and read through lots of articles/blogs on a specific topic that I'm not familiar with and solve the problem I'm faced with.
+
 ## Developer
 * Art Traspe
 
@@ -54,4 +57,5 @@ Since this is my first real-world/automation project using Python, it's an under
 [The MIT License](https://choosealicense.com/licenses/mit/)
 
 ## Acknowledgments
+* Thanks to Renmar Hernandez for the inspiration in creating this script
 * Thanks to my work colleagues who allowed me to bug them to test and improve this script :)
