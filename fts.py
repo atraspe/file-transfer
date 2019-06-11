@@ -247,11 +247,13 @@ class FtpConnection():
                 f'By default, transferring files to/from {self.remote_dir}')
 
         try:
-            self.logger.info(f'Currently in {self.ftp.pwd()}')
-            self.logger.info(f'Changing directory to: {self.remote_dir}')
+            self.logger.info(f'Currently in $HOME ({self.ftp.pwd()})')
+
             changed_dir = False
-            self.ftp.cwd(self.remote_dir)
-            changed_dir = True
+            if self.remote_dir != 'home':
+                self.logger.info(f'Changing directory to: {self.remote_dir}')
+                self.ftp.cwd(self.remote_dir)
+                changed_dir = True
 
             self.logger.info('Switching to Binary mode.')
             self.ftp.sendcmd('TYPE I')
@@ -331,7 +333,7 @@ def get_logger(name, level=logging.DEBUG):
     """Function to create the log handler
     
     Returns:
-    logger (Logger object): Logger object with FileHandler and StreamHandler objects
+    A logging.Logger object with FileHandler and StreamHandler objects
     """
     # create a custom logger
     logger = logging.getLogger(name)
@@ -353,7 +355,11 @@ def load_json_config(logger, file):
     Arguments:
     logger(logging.Logger object) - object that handles the FileHandler and StreamHandler
     file(str) - JSON configuration file
+
+    Returns:
+    A tuple of dictionaries that contain information from JSON configuration file
     """
+
     logger.info(f'Loading configuration from the JSON file ({JSON_CONFIG})...')
 
     json_file = Path(file)
@@ -369,22 +375,10 @@ def load_json_config(logger, file):
     # user credentials of different non-MS hosts
     json_nonms_details = data['fts_config']['nonms']
 
-    csv_dir = data['fts_config']['csv']['csv_dir']
-    csv_files = data['fts_config']['csv']['csv_files']
-    csv_list = [value for x in range(len(csv_files))
-                for key, value in csv_files[x].items()]
-    log_dir = data['fts_config']['log']['log_dir']
+    # csv-related configuration
+    json_csv_details = data['fts_config']['csv']
 
-    return json_gate_details, json_nonms_details, csv_dir, csv_list, log_dir
-
-
-def args_passed(args_list):
-    """Function to filter out the arguments passed using filter()
-    
-    Argument:
-    args_list (list): List of arguments to be filtered"""
-    
-    return list(filter(lambda x: bool(x), args_list))
+    return (json_gate_details, json_nonms_details, json_csv_details)
 
 
 def check_config(logger, csv_files):
@@ -429,7 +423,7 @@ def ask_user(logger, prompt, header=None, response_type='int', main_dict=None, m
     column (int): Number of columns when displaying options to choose from; default 4
 
     Returns:
-    tuple: The key and value from main dictionary
+    A tuple of the key and value pair from main dictionary
     """
 
     menu_choice = None
@@ -485,8 +479,7 @@ def ask_user(logger, prompt, header=None, response_type='int', main_dict=None, m
             # just return that user input
             if (not main_dict and not menu_dict) or header == 'MS Client ID':
                 main_value = answer
-                # return main_value, menu_choice
-
+            
             if menu_dict:
                 # user input will be validated against eh menu dictionary first
                 menu_choice = menu_dict[answer]
@@ -503,7 +496,7 @@ def ask_user(logger, prompt, header=None, response_type='int', main_dict=None, m
 
         else:
             print()
-            return main_value, menu_choice
+            return (main_value, menu_choice)
 
 
 def parse_csv(filename, logger, sort=False,):
@@ -515,7 +508,7 @@ def parse_csv(filename, logger, sort=False,):
     sort (bool): If values need to be sorted prior to storing into menu dictionary
 
     Returns:
-    tuple: A tuple of 2 dictionaries: one holds the main values while the other for the user menu
+    A tuple of 2 dictionaries: one holds the main values while the other for the user menu
     """
 
     # global config_dir
@@ -589,6 +582,19 @@ def check_if_existing(logger, files):
 
 
 def validate_or_ask_arg(logger, **kwargs):
+    """
+    Function to validate the command line argument passed. If not passed as argument or
+    other information is needed from user which is not part of the command line arguments,
+    then call the other function (ask_user) to ask user of it
+
+    Arguments:
+    logger (logging.Logger object) - Object that handles the FileHandler and StreamHandler
+    kwargs (dict) - keyword arguments
+
+    Returns:
+    The value validated from the main dictionary
+    """
+
     arg = kwargs.get('arg', None)
     header = kwargs.get('header', None)
     prompt = kwargs.get('prompt', None)
@@ -655,12 +661,10 @@ def main():
     global curr_dir, config_dir
     prog_desc = 'purpose: transfer file to/from a host that is behind a UNIX gateway. file(s) will be transferred in Binary mode.'
     choice_prompt = '\n\nYour choice'
-    username_prompt = 'Enter username'
+    username_prompt = 'Login'
     passcode_prompt = 'Enter IDLDAP.net Password'
-    password_prompt = 'Enter password'
     required_str = 'All required arguments passed'
     action = {1: 'download', 2: 'upload'}
-    gateway_valid = False
 
     parser = argparse.ArgumentParser(description=prog_desc, add_help=False)
 
@@ -689,10 +693,14 @@ def main():
 
     logger.info(equal_sign_line)
     logger.info(f'SCRIPT LOG - Start')
-    logger.info(f'{__file__} [ Version {VERSION_NO} ] script initiated...')
+    logger.info(f'{__file__} [ Version {VERSION_NO} ] File Transfer Script initiated...')
 
-    json_gate_details, json_nonms_details, csv_dir, csv_list, log_dir = load_json_config(
-        logger, JSON_CONFIG)
+    # obtain information from JSON file
+    json_gate_details, json_nonms_details, json_csv_details = load_json_config(logger, JSON_CONFIG)
+
+    csv_dir = json_csv_details['csv_dir']
+    csv_files = json_csv_details['csv_files']
+    csv_list = [value for x in range(len(csv_files)) for key, value in csv_files[x].items()]
 
     # check if all required CSV files exist
     check_config(logger, csv_list)
@@ -715,13 +723,17 @@ def main():
     # determine which parameters were and were not passed when calling the program
     # then check for validity
 
+    # a lambda to filter out the arguments passed using filter()
+    j = lambda k : list(filter(lambda l: bool(l), k))
+
     # some lambda for concatenating some logging prompt/text
     x = lambda a, b : f'{a} user ({b}) taken from the JSON file ({JSON_CONFIG})'
     y = lambda a, b : f'{a} password ({len(b) * "*"}) taken from the JSON file ({JSON_CONFIG})'
     z = lambda a : f'{a} missing from the JSON file ({JSON_CONFIG})!!'
 
+
     # if there is at least 1 argument passed
-    if len(args_passed([args.gateway, args.username, args.passcode, args.server, args.action, args.file])):
+    if len(j([args.gateway, args.username, args.passcode, args.server, args.action, args.file])):
         logger.info('Checking for validity of arguments passed...')
 
     unix_gate, gateway_location = validate_or_ask_arg(
@@ -755,11 +767,11 @@ def main():
                 f'Non-MS connection doesn\'t need an instance ({args.instance}) parameter...')
             args.instance = None
         # all necessary arguments for non-MS connection passed
-        if len(args_passed([args.gateway, args.username, args.passcode, args.action, args.file])) == 5:
+        if len(j([args.gateway, args.username, args.passcode, args.action, args.file])) == 5:
             logger.info(required_str)
     elif args.server == 'ms':
         # all necessary arguments for MS connection passed
-        if len(args_passed([args.gateway, args.username, args.passcode, args.instance, args.action, args.file])) == 6:
+        if len(j([args.gateway, args.username, args.passcode, args.instance, args.action, args.file])) == 6:
             logger.info(required_str)
 
     server_group = validate_or_ask_arg(
@@ -784,7 +796,7 @@ def main():
                     logger.info(y('Non-MS host', remote_pwd))
                 else:
                     logger.warning(z(f'Password for {remote_host_fqdn}'))
-                    remote_pwd, temp_val = ask_user(logger, prompt=password_prompt, response_type='str', echo=False, quit=False)
+                    remote_pwd, temp_val = ask_user(logger, prompt=f"{remote_user}@{remote_host_fqdn}'s password", response_type='str', echo=False, quit=False)
                 print()
                 break
 
@@ -795,10 +807,12 @@ def main():
             remote_user, temp_val = ask_user(
                 logger, header=f'Credentials for {remote_host_fqdn}',  prompt=username_prompt,  response_type='str', quit=False)
             remote_pwd, temp_val = ask_user(
-                logger, prompt=password_prompt, response_type='str', echo=False, quit=False)
+                logger, prompt=f"{remote_user}@{remote_host_fqdn}'s password", response_type='str', echo=False, quit=False)
 
         remote_dir, temp_val = ask_user(logger,
-                                        prompt='Enter directory (absolute path) on remote host', response_type='str')
+                                        prompt="Path (absolute) on remote host ('[h/H]ome' for home directory)", response_type='str', quit=False)
+        if remote_dir.lower() == 'home':
+            remote_dir = 'home'
 
     else:
         # user wants to tranfer file(s) to a MS host
