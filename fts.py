@@ -202,7 +202,7 @@ class FtpConnection():
                         f'A message from the server:\n{welcome}')
 
                 self.logger.info(
-                    'When prompted, please approve the sign-in request in your "VIP Access" mobile/desktop app...')
+                    'Please approve the push notification (sign-in request) in your "VIP Access" mobile app...')
 
                 # update Class attribute with the ftp object
                 self.ftp = ftp
@@ -363,15 +363,19 @@ def load_json_config(logger, file):
     with open(json_file) as f:
         data = json.load(f)
 
-    json_gate_user = data['fts_config']['gateway']['username']
-    json_gate_pwd = data['fts_config']['gateway']['password']
+    # user credentials for Unix gate
+    json_gate_details = data['fts_config']['gateway']
+
+    # user credentials of different non-MS hosts
+    json_nonms_details = data['fts_config']['nonms']
+
     csv_dir = data['fts_config']['csv']['csv_dir']
     csv_files = data['fts_config']['csv']['csv_files']
     csv_list = [value for x in range(len(csv_files))
                 for key, value in csv_files[x].items()]
     log_dir = data['fts_config']['log']['log_dir']
 
-    return json_gate_user, json_gate_pwd, csv_dir, csv_list, log_dir
+    return json_gate_details, json_nonms_details, csv_dir, csv_list, log_dir
 
 
 def args_passed(args_list):
@@ -687,7 +691,7 @@ def main():
     logger.info(f'SCRIPT LOG - Start')
     logger.info(f'{__file__} [ Version {VERSION_NO} ] script initiated...')
 
-    json_gate_user, json_gate_pwd, csv_dir, csv_list, log_dir = load_json_config(
+    json_gate_details, json_nonms_details, csv_dir, csv_list, log_dir = load_json_config(
         logger, JSON_CONFIG)
 
     # check if all required CSV files exist
@@ -711,6 +715,11 @@ def main():
     # determine which parameters were and were not passed when calling the program
     # then check for validity
 
+    # some lambda for concatenating some logging prompt/text
+    x = lambda a, b : f'{a} user ({b}) taken from the JSON file ({JSON_CONFIG})'
+    y = lambda a, b : f'{a} password ({len(b) * "*"}) taken from the JSON file ({JSON_CONFIG})'
+    z = lambda a : f'{a} missing from the JSON file ({JSON_CONFIG})!!'
+
     # if there is at least 1 argument passed
     if len(args_passed([args.gateway, args.username, args.passcode, args.server, args.action, args.file])):
         logger.info('Checking for validity of arguments passed...')
@@ -723,17 +732,21 @@ def main():
             logger, arg=args.username, header='Gateway username', prompt=username_prompt, response_type='str', quit=False)
         # if user passed the Unix gate username, then user also needs to enter gate password so nullify json_gate_pwd
         json_gate_pwd = None
-    elif json_gate_user:
-        logger.info(
-            f'Unix gate user ({json_gate_user}) taken from {JSON_CONFIG}')
+    else:
+        for key, value in json_gate_details.items():
+            if key == 'username':
+                json_gate_user = value
+            elif key == 'password':
+                json_gate_pwd = value
+
+        logger.info(x('Unix gate', json_gate_user))
         gate_username = json_gate_user
 
     if args.passcode or not json_gate_pwd:
         gate_passcode = validate_or_ask_arg(
             logger, arg=args.passcode, header='IDLDAP.net password', prompt=passcode_prompt, response_type='str', quit=False, echo=False)
     elif json_gate_pwd:
-        logger.info(
-            f'Unix gate password ({len(json_gate_pwd) * "*"}) taken from {JSON_CONFIG}')
+        logger.info(y('Unix gate', json_gate_pwd))
         gate_passcode = json_gate_pwd
 
     if args.server == 'nonms':
@@ -754,26 +767,45 @@ def main():
 
     if server_group == 'nonms':
         # user wants to tranfer file(s) to a non-MS host
-        remote_host = validate_or_ask_arg(
+        remote_host_fqdn, remote_host = validate_or_ask_arg(
             logger, header='Non-MS Host', prompt='\n\nTransfer files to/from', main_dict=non_ms_hosts_options, menu_dict=non_ms_hosts_menu)
+        
+        # initialize; if credentials for this non-MS host do not exist in the JSON file
+        remote_user = None
+        remote_pwd = None
 
-        # ask for more details
-        logger.info(
-            'User prompted to enter credentials for remote host and file location')
-        remote_user, temp_val = ask_user(
-            logger, header=f'Credentials for {remote_host}',  prompt=username_prompt,  response_type='str', quit=False)
-        remote_pwd, temp_val = ask_user(
-            logger, prompt=password_prompt, response_type='str', echo=False, quit=False)
+        for key, value in json_nonms_details.items():
+            if key == remote_host:
+                remote_user = value.get('username', None)
+                if remote_user:
+                    logger.info(x('Non-MS host', remote_user))
+                remote_pwd = value.get('password', None)
+                if remote_pwd:
+                    logger.info(y('Non-MS host', remote_pwd))
+                else:
+                    logger.warning(z(f'Password for {remote_host_fqdn}'))
+                    remote_pwd, temp_val = ask_user(logger, prompt=password_prompt, response_type='str', echo=False, quit=False)
+                print()
+                break
+
+        if not remote_user:
+            # non-MS host's credentials are not in the JSON file, so ask user
+            logger.info(
+                'User prompted to enter credentials for remote host and file location')
+            remote_user, temp_val = ask_user(
+                logger, header=f'Credentials for {remote_host_fqdn}',  prompt=username_prompt,  response_type='str', quit=False)
+            remote_pwd, temp_val = ask_user(
+                logger, prompt=password_prompt, response_type='str', echo=False, quit=False)
+
         remote_dir, temp_val = ask_user(logger,
                                         prompt='Enter directory (absolute path) on remote host', response_type='str')
 
     else:
         # user wants to tranfer file(s) to a MS host
-
         if args.instance:
             # if --instance argument passed, then look up for the values in the client_accounts dictionary
             try:
-                remote_user, remote_host, remote_pwd, clientID = client_accounts[args.instance]
+                remote_user, remote_host_fqdn, remote_pwd, clientID = client_accounts[args.instance]
             except KeyError:
                 logger.warning(
                     f'MS instance passed as an argument ({args.instance}) is unrecognized...')
@@ -786,6 +818,7 @@ def main():
             logger.info('User prompted to select a MS client ID from the list...')
 
             # extract all the unique MS Client IDs from the dictionary and display for user menu
+            # e.g. ALDIS, JCTRL, etc.
             temp_list = list(set([ value[3] for key, value in client_accounts.items() ]))
             temp_list.sort()
             MS_clientID_menu = {}
@@ -797,6 +830,7 @@ def main():
             temp_val, clientID = ask_user(logger, prompt=choice_prompt, header='MS Client ID', main_dict=client_accounts, menu_dict=MS_clientID_menu)
 
             # extract only the instances for the chosen MS client ID and display for user menu
+            # e.g. baldis1, baldis2, paldis1, paldis2
             MS_client_menu = {}
             counter = 1
             for key,value in client_accounts.items():
@@ -804,15 +838,15 @@ def main():
                     MS_client_menu[counter] = key
                     counter += 1
             
-            # extract the remote_user, remote_host, remote_pwd and clientID from client_accounts dictionary
-            (remote_user, remote_host, remote_pwd, clientID), temp_val = ask_user(logger,
+            # extract the remote_user, remote_host_fqdn, remote_pwd and clientID from client_accounts dictionary
+            (remote_user, remote_host_fqdn, remote_pwd, clientID), temp_val = ask_user(logger,
                                 prompt=choice_prompt, header='Managed Services Instance', main_dict=client_accounts, menu_dict=MS_client_menu, column=7)
             
         # set remote_dir to default directory
         remote_dir = f'aiprod{clientID}/implementor/{gate_username}'
 
     # host = f'MS host' if server_group == 'ms' else f'non-MS host'
-    logger.info(f'Credentials to use: {remote_user}@{remote_host}')
+    logger.info(f'Credentials to use: {remote_user}@{remote_host_fqdn}')
 
     # ask user of the action to take
     action = validate_or_ask_arg(
@@ -833,7 +867,7 @@ def main():
 
     # create a FtpConnection object
     FTP = FtpConnection(unix_gate, gateway_location, gate_username, gate_passcode,
-                        server_group, args.instance, action, files, remote_host, remote_user, remote_pwd, remote_dir, logger)
+                        server_group, args.instance, action, files, remote_host_fqdn, remote_user, remote_pwd, remote_dir, logger)
 
     # establish connection with Unix gate, connect with chosen remote host
     # and proceed to transfer files
