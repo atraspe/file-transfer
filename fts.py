@@ -24,9 +24,11 @@ import csv
 import ftplib
 import contextlib
 import sys
+import threading
+import time
 from pprint import pprint
 from pathlib import Path
-from datetime import datetime
+
 
 # global variables and constants
 VERSION_NO = '1.0'
@@ -155,7 +157,8 @@ class TerminateTheScript(Error):
     """Exception raised from the other custom exceptions to prematurely end the script
 
     Attribute:
-    logger(logging.Logger object) - object that handles the FileHandler and StreamHandler"""
+    logger(logging.Logger object) - object that handles the FileHandler and StreamHandler
+    """
 
     def __init__(self, logger):
         self.logger = logger
@@ -171,6 +174,8 @@ class TerminateTheScript(Error):
 
 class FtpConnection():
 
+    next_f = None
+
     def __init__(self, gateway, gate_location, gate_user, gate_pwd, server_grp, ms_instance, action, files, remote_host, remote_user, remote_pwd, remote_dir, logger):
         self.gateway = gateway
         self.gate_location = gate_location
@@ -183,10 +188,46 @@ class FtpConnection():
         self.remote_host = remote_host
         self.remote_user = remote_user
         self.remote_pwd = remote_pwd
-        # self.clientID = clientID
         self.remote_dir = remote_dir
         self.logger = logger
         self.host = f'MS host' if self.server_grp == 'ms' else f'non-MS host'
+
+
+    def _progress_bar(self, file_name, file_size):
+        """
+        Function to calculate the size of file being transferred
+        and calling the _update_bar function to updated and display
+        the progress bar itself
+        
+        """
+        runs = file_size
+        this_file = Path(file_name)
+
+        while this_file.stat().st_size <= file_size:
+            self._update_bar(runs, this_file.stat().st_size + 1)
+            if this_file.stat().st_size >= file_size:
+                self._update_bar(runs, runs + 1)
+                break
+
+
+    def _update_bar(self, total, progress):
+        """
+        Function to updated and display the progress bar in the console.
+
+        Original source: https://stackoverflow.com/a/15860757/1391441
+        """
+        
+        barLength, status = 20, ""
+        progress = float(progress) / float(total)
+        if progress >= 1.:
+            progress, status = 1, "\r\n"
+        block = int(round(barLength * progress))
+        text = "\r[{}] {:.0f}% {}".format(
+            "#" * block + "-" * (barLength - block), round(progress * 100, 0),
+            status)
+        sys.stdout.write(text)
+        sys.stdout.flush()
+
 
     def connect_and_transfer(self):
         self.logger.info(
@@ -212,6 +253,7 @@ class FtpConnection():
         except ftplib.all_errors as e:
             raise GatewayConnectionError(
                 self.logger, self.gateway, self.gate_location)
+
 
     def _login_to_gate(self):
 
@@ -263,11 +305,15 @@ class FtpConnection():
                 uploaded = False
                 self.logger.info(dash_line)
                 self.logger.info(f'Starting {self.action} of {next_file}...')
+                file_size = self.ftp.size(next_file)
 
                 if self.action == 'download':
                     with open(next_file, 'wb') as new_file:
-                        self.ftp.retrbinary(
-                            f'RETR {next_file}', new_file.write)
+                        # prepare the thread to display the progress bar for file transfer
+                        thread = threading.Thread(target=self._progress_bar, args=(next_file, file_size) )
+                        thread.start()
+                        self.ftp.retrbinary(cmd=f'RETR {next_file}', callback=new_file.write)
+                        thread.join()
                         downloaded = True
                 else:
                     with open(next_file, 'rb') as new_file:
