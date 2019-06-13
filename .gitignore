@@ -123,3 +123,9 @@ notes.txt
 demo1.gif
 download_demo-without_parameters.gif
 d5.tr027419.log.zip
+*.gif
+progress_sample.py
+Byp.*
+single_thread.py
+*.exp
+*.ksh
