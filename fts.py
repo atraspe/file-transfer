@@ -25,6 +25,7 @@ import ftplib
 import contextlib
 import sys
 import threading
+import datetime
 import time
 from pprint import pprint
 from pathlib import Path
@@ -32,8 +33,11 @@ from pathlib import Path
 
 # global variables and constants
 VERSION_NO = '1.0'
+BUILD_DATE = '2019/06/19'
+BUILD_TIME = '14:55:35'
 equal_sign_line = '=' * 72
 dash_line = '-' * 47
+t = lambda: f'{datetime.datetime.now():%c}'
 
 curr_dir = Path()
 LOG_DIR = curr_dir / 'logs'
@@ -42,7 +46,9 @@ JSON_CONFIG = 'fts.json'
 
 # FileHandler (asctime) will include the date and time stamps
 FORMATTER = logging.Formatter(
-    fmt='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %I:%M:%S %p')
+    fmt='%(asctime)s - %(levelname)s - %(message)s', datefmt='%I:%M:%S %p')
+    # fmt='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %I:%M:%S %p')
+
 LOG_FILE = LOG_DIR / 'fts.log'
 
 
@@ -73,8 +79,8 @@ class GatewayConnectionError(Error):
         self.logger.warning('Possible causes:')
         self.logger.warning(
             '1. Incorrect IDLDAP.net credentials (username and/or password)')
-        self.logger.warning('2. You\'re out of the company\'s network')
-        self.logger.warning('3. "VIP Access" sign-in request timed out')
+        self.logger.warning('2. Not connected to the company\'s network')
+        self.logger.warning('3. "VIP Access" sign-in request was denied or timed out')
         self.logger.info(dash_line)
         raise TerminateTheScript(self.logger)
 
@@ -96,7 +102,7 @@ class RemoteHostConnectionError(Error):
         self.logger.error(
             f'Host login incorrect! {self.remote_user}@{self.remote_host}')
         self.logger.warning(
-            f'Please double check your credentials (username and/or password)...')
+            f'Please double check your credentials (username and/or password)')
         raise TerminateTheScript(self.logger)
 
 
@@ -167,14 +173,15 @@ class TerminateTheScript(Error):
         self.logger.info('End of program')
         self.logger.info(f'Logged everything in {LOG_FILE}')
         self.logger.info('Thank you for using the script!')
-        self.logger.info(f'SCRIPT LOG - End')
+        self.logger.info(f'END - {t()}')
         self.logger.info(equal_sign_line)
         sys.exit()
 
 
 class FtpConnection():
 
-    next_f = None
+    # next_f = None
+    upload_size = 0
 
     def __init__(self, gateway, gate_location, gate_user, gate_pwd, server_grp, ms_instance, action, files, remote_host, remote_user, remote_pwd, remote_dir, logger):
         self.gateway = gateway
@@ -193,26 +200,35 @@ class FtpConnection():
         self.host = f'MS host' if self.server_grp == 'ms' else f'non-MS host'
 
 
-    def _progress_bar(self, file_name, file_size):
+    def _progress_bar(self, file_name, file_size, action):
         """
-        Function to calculate the size of file being transferred
-        and calling the _update_bar function to updated and display
-        the progress bar itself
+        Class method to calculate the size of file being transferred
+        and calling the _update_bar function to update and display
+        the progress bar
         
         """
         runs = file_size
         this_file = Path(file_name)
+        current_filesize = 0
+        counter = 0
 
-        while this_file.stat().st_size <= file_size:
-            self._update_bar(runs, this_file.stat().st_size + 1)
-            if this_file.stat().st_size >= file_size:
-                self._update_bar(runs, runs + 1)
+        while current_filesize <= file_size:
+            if action == 'download':
+                current_filesize = this_file.stat().st_size
+            else:
+                current_filesize = self.upload_size
+
+            # print(current_filesize)
+            self._update_progress_bar(runs, current_filesize + 1)
+            
+            if current_filesize >= file_size:
+                time.sleep(1)
                 break
 
 
-    def _update_bar(self, total, progress):
+    def _update_progress_bar(self, total, progress):
         """
-        Function to updated and display the progress bar in the console.
+        Class method to update and display the progress bar in the console.
 
         Original source: https://stackoverflow.com/a/15860757/1391441
         """
@@ -222,9 +238,7 @@ class FtpConnection():
         if progress >= 1.:
             progress, status = 1, "\r\n"
         block = int(round(barLength * progress))
-        text = "\r[{}] {:.0f}% {}".format(
-            "#" * block + "-" * (barLength - block), round(progress * 100, 0),
-            status)
+        text = f'\r[{"#" * block + "-" * (barLength - block)}] {round(progress * 100, 0):.0f}% {status}'
         sys.stdout.write(text)
         sys.stdout.flush()
 
@@ -283,6 +297,17 @@ class FtpConnection():
             raise RemoteHostConnectionError(
                 self.logger, self.remote_user, self.remote_host)
 
+    def _update_remote_filesize(self, x):
+        """
+        Class method to update the instance variable (upload_size) to calculate every block of data transferred
+
+        """
+        # seems that the ftp.size() method isn't "friendly" if done repeatedly in the _progress_bar function
+        # and it's getting mixed results. have to devise a workaround which is thru an instance variable
+        # update this variable every block of data that is uploaded
+        self.upload_size += 8192
+
+
     def _transfer_files(self):
         if self.server_grp == 'ms':
             self.logger.info(
@@ -305,19 +330,31 @@ class FtpConnection():
                 uploaded = False
                 self.logger.info(dash_line)
                 self.logger.info(f'Starting {self.action} of {next_file}...')
-                file_size = self.ftp.size(next_file)
+                
 
                 if self.action == 'download':
                     with open(next_file, 'wb') as new_file:
+                        file_size = self.ftp.size(next_file)
+                        
                         # prepare the thread to display the progress bar for file transfer
-                        thread = threading.Thread(target=self._progress_bar, args=(next_file, file_size) )
-                        thread.start()
+                        thread_d = threading.Thread(target=self._progress_bar, args=(next_file, file_size, self.action))
+                        
+                        thread_d.start()
                         self.ftp.retrbinary(cmd=f'RETR {next_file}', callback=new_file.write)
-                        thread.join()
+                        thread_d.join()
                         downloaded = True
                 else:
                     with open(next_file, 'rb') as new_file:
-                        self.ftp.storbinary(f'STOR {next_file}', new_file)
+                        file_size = Path(next_file).stat().st_size
+                        self.upload_size = 0
+
+                        # prepare the thread to display the progress bar for file transfer
+                        thread_u = threading.Thread(target=self._progress_bar, args=(next_file, file_size, self.action))
+                        
+                        thread_u.start()
+                        self.ftp.storbinary(f'STOR {next_file}', new_file, callback=self._update_remote_filesize)
+                        thread_u.join()
+                        
                         uploaded = True
 
                 if downloaded or uploaded:
@@ -449,7 +486,7 @@ def check_config(logger, csv_files):
         if not csv_file.exists():
             raise ConfigDoesNotExistError(logger, csv_file)
 
-    logger.info('Configurations validated...')
+    logger.info('Configurations validated')
 
 
 def ask_user(logger, prompt, header=None, response_type='int', main_dict=None, menu_dict=None, echo=True, quit=True, column=4):
@@ -604,7 +641,7 @@ def parse_csv(filename, logger, sort=False,):
             menu_dict[counter] = item
             counter += 1
 
-    logger.info(f'{csv_file.name} successfully loaded...')
+    logger.info(f'{csv_file.name} successfully loaded')
     # return both dictionaries as tuple
     return (main_dict, menu_dict)
 
@@ -674,7 +711,7 @@ def validate_or_ask_arg(logger, **kwargs):
                 return unix_gate, other_value
             else:
                 logger.warning(
-                    f'{header.title()} passed ({arg}) is invalid...')
+                    f'{header.title()} passed ({arg}) is invalid!')
                 # Nullify arg's value so it will be caught by the next condition
                 arg = None
 
@@ -738,8 +775,9 @@ def main():
     logger = get_logger(__name__, args.loglevel)
 
     logger.info(equal_sign_line)
-    logger.info(f'SCRIPT LOG - Start')
-    logger.info(f'{__file__} [ Version {VERSION_NO} ] File Transfer Script initiated...')
+    # logger.info(f'SCRIPT LOG - Start')
+    logger.info(f'START - {t()}')
+    logger.info(f'File Transfer Script {__file__} [ Version {VERSION_NO} Build: {BUILD_DATE} at: {BUILD_TIME} ]')
 
     # obtain information from JSON file
     json_gate_details, json_nonms_details, json_csv_details = load_json_config(logger, JSON_CONFIG)
@@ -810,7 +848,7 @@ def main():
     if args.server == 'nonms':
         if args.instance:
             logger.warning(
-                f'Non-MS connection doesn\'t need an instance ({args.instance}) parameter...')
+                f'Non-MS connection doesn\'t need an instance ({args.instance}) parameter')
             args.instance = None
         # all necessary arguments for non-MS connection passed
         if len(j([args.gateway, args.username, args.passcode, args.action, args.file])) == 5:
@@ -868,7 +906,7 @@ def main():
                 remote_user, remote_host_fqdn, remote_pwd, clientID = client_accounts[args.instance]
             except KeyError:
                 logger.warning(
-                    f'MS instance passed as an argument ({args.instance}) is unrecognized...')
+                    f'MS instance passed as an argument ({args.instance}) is unrecognized!')
                 args.instance = None
 
         if not args.instance:
@@ -937,7 +975,7 @@ def main():
     logger.info('End of program')
     logger.info(f'Logged everything in {LOG_FILE}')
     logger.info('Thank you for using the script!')
-    logger.info(f'SCRIPT LOG - End')
+    logger.info(f'END - {t()}')
     logger.info(equal_sign_line)
 
 
