@@ -129,3 +129,4 @@ Byp.*
 single_thread.py
 *.exp
 *.ksh
+*.tar.gz
